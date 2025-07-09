@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>情绪海报生成器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'sad': '#3B82F6',      // 蓝色：悲伤
+            'happy': '#FBBF24',    // 黄色：欢乐
+            'passionate': '#EF4444', // 红色：热情
+            'excited': '#8B5CF6',   // 紫色：亢奋
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .emotion-btn {
+        @apply transition-all duration-300 ease-in-out transform hover:scale-105 active:scale-95;
+        @apply touch-manipulation min-h-[60px];
+      }
+      .poster-container {
+        @apply relative w-full bg-gray-100 rounded-lg overflow-hidden shadow-xl;
+      }
+      .btn-disabled {
+        @apply opacity-50 cursor-not-allowed pointer-events-none;
+      }
+      .no-scroll {
+        overflow: hidden;
+        touch-action: none;
+      }
+      .mobile-poster {
+        @apply h-[300px] md:h-[500px];
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="container mx-auto px-4 py-8">
+    <header class="text-center mb-8">
+      <h1 class="text-[clamp(1.5rem,5vw,2.5rem)] font-bold text-gray-800 mb-3">情绪海报生成器</h1>
+      <p class="text-gray-600 text-base max-w-2xl mx-auto">点击下方按钮20次，探索你的情绪图谱并生成专属抽象海报</p>
+    </header>
+
+    <main class="space-y-8">
+      <!-- 情绪按钮区域 -->
+      <section id="emotion-buttons" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button id="sad" class="emotion-btn bg-sad text-white py-4 px-2 rounded-xl shadow-lg flex flex-col items-center">
+          <i class="fa fa-frown-o text-2xl mb-1"></i>
+          <span class="text-lg font-medium">悲伤</span>
+          <span class="mt-1 text-xs opacity-80">点击: <span class="counter">0</span></span>
+        </button>
+        <button id="happy" class="emotion-btn bg-happy text-white py-4 px-2 rounded-xl shadow-lg flex flex-col items-center">
+          <i class="fa fa-smile-o text-2xl mb-1"></i>
+          <span class="text-lg font-medium">欢乐</span>
+          <span class="mt-1 text-xs opacity-80">点击: <span class="counter">0</span></span>
+        </button>
+        <button id="passionate" class="emotion-btn bg-passionate text-white py-4 px-2 rounded-xl shadow-lg flex flex-col items-center">
+          <i class="fa fa-heart text-2xl mb-1"></i>
+          <span class="text-lg font-medium">热情</span>
+          <span class="mt-1 text-xs opacity-80">点击: <span class="counter">0</span></span>
+        </button>
+        <button id="excited" class="emotion-btn bg-excited text-white py-4 px-2 rounded-xl shadow-lg flex flex-col items-center">
+          <i class="fa fa-bolt text-2xl mb-1"></i>
+          <span class="text-lg font-medium">亢奋</span>
+          <span class="mt-1 text-xs opacity-80">点击: <span class="counter">0</span></span>
+        </button>
+      </section>
+
+      <!-- 进度指示器 -->
+      <section class="bg-white p-4 rounded-xl shadow-md">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-gray-700 font-medium text-sm">点击进度:</span>
+          <span id="progress-text" class="text-gray-500 text-sm">0/20</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2">
+          <div id="progress-bar" class="bg-gradient-to-r from-sad via-happy to-excited h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </section>
+
+      <!-- 结果与海报区域 -->
+      <section id="results" class="hidden">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">你的情绪图谱</h2>
+        
+        <div class="grid grid-cols-1 gap-6">
+          <!-- 数据可视化 -->
+          <div class="bg-white p-4 rounded-xl shadow-md">
+            <h3 class="text-lg font-semibold text-gray-700 mb-3">情绪分布</h3>
+            <div class="h-48">
+              <canvas id="emotion-chart"></canvas>
+            </div>
+          </div>
+          
+          <!-- 海报预览 -->
+          <div>
+            <h3 class="text-lg font-semibold text-gray-700 mb-3">生成的抽象海报</h3>
+            <div class="poster-container mobile-poster">
+              <canvas id="poster-canvas"></canvas>
+              <div id="poster-error" class="hidden absolute inset-0 bg-white/80 flex items-center justify-center text-red-500 text-lg font-medium">
+                <div class="text-center">
+                  <i class="fa fa-exclamation-triangle mb-2"></i>
+                  <p>海报生成失败</p>
+                  <p id="error-message" class="text-xs mt-1 text-red-600">请查看控制台获取详细信息</p>
+                </div>
+              </div>
+            </div>
+            <div class="flex justify-center space-x-3 mt-3">
+              <button id="download-btn" class="bg-gray-800 hover:bg-gray-700 text-white py-2 px-4 rounded-lg shadow flex items-center transition-all duration-300 text-sm">
+                <i class="fa fa-download mr-1"></i> 下载海报
+              </button>
+              <button id="regenerate-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg shadow flex items-center transition-all duration-300 text-sm">
+                <i class="fa fa-refresh mr-1"></i> 重新生成
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="mt-12 text-center text-gray-500 text-xs">
+      <p>© 2023 情绪海报生成器 | 一次有趣的情绪探索体验</p>
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  <script>
+    // 情绪数据
+    const emotions = {
+      sad: { count: 0, color: '#3B82F6', name: '悲伤', primaryShapes: ['triangle', 'square', 'line'] },
+      happy: { count: 0, color: '#FBBF24', name: '欢乐', primaryShapes: ['wave', 'circle', 'musicNote'] },
+      passionate: { count: 0, color: '#EF4444', name: '热情', primaryShapes: ['spiral', 'curve', 'flame'] },
+      excited: { count: 0, color: '#8B5CF6', name: '亢奋', primaryShapes: ['randomTriangle', 'bolt', 'star'] }
+    };
+    
+    let totalClicks = 0;
+    const TOTAL_CLICKS_REQUIRED = 20;
+    let buttonsDisabled = false;
+    let emotionChart = null;
+    
+    // DOM 元素
+    const buttons = document.querySelectorAll('#emotion-buttons button');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const resultsSection = document.getElementById('results');
+    const downloadBtn = document.getElementById('download-btn');
+    const regenerateBtn = document.getElementById('regenerate-btn');
+    const posterCanvas = document.getElementById('poster-canvas');
+    const posterError = document.getElementById('poster-error');
+    const errorMessage = document.getElementById('error-message');
+    
+    // 初始化按钮事件
+    buttons.forEach(button => {
+      button.addEventListener('click', () => {
+        if (buttonsDisabled) return;
+        
+        // 禁止页面滚动
+        document.body.classList.add('no-scroll');
+        
+        const emotion = button.id;
+        emotions[emotion].count++;
+        totalClicks++;
+        
+        // 更新 UI
+        updateUI();
+        
+        // 检查是否达到最大点击次数
+        if (totalClicks === TOTAL_CLICKS_REQUIRED) {
+          buttonsDisabled = true;
+          buttons.forEach(btn => btn.classList.add('btn-disabled'));
+          
+          // 显示结果区域
+          setTimeout(() => {
+            resultsSection.classList.remove('hidden');
+            setTimeout(generateResults, 300);
+          }, 100);
+        }
+        
+        // 允许页面滚动
+        setTimeout(() => {
+          document.body.classList.remove('no-scroll');
+        }, 300);
+      });
+    });
+    
+    // 重新生成按钮事件
+    regenerateBtn.addEventListener('click', () => {
+      location.reload();
+    });
+    
+    // 更新 UI
+    function updateUI() {
+      // 更新计数器
+      for (const [emotion, data] of Object.entries(emotions)) {
+        document.querySelector(`#${emotion} .counter`).textContent = data.count;
+      }
+      
+      // 更新进度条
+      const progress = (totalClicks / TOTAL_CLICKS_REQUIRED) * 100;
+      progressBar.style.width = `${progress}%`;
+      progressText.textContent = `${totalClicks}/${TOTAL_CLICKS_REQUIRED}`;
+    }
+    
+    // 生成结果
+    function generateResults() {
+      try {
+        console.log("开始生成结果...");
+        
+        // 创建情绪图表
+        createEmotionChart();
+        
+        // 生成抽象海报
+        generateAbstractPoster();
+        
+        // 添加下载事件
+        downloadBtn.addEventListener('click', downloadPoster);
+        
+        // 隐藏错误提示
+        posterError.classList.add('hidden');
+        
+        console.log("结果生成成功");
+      } catch (error) {
+        console.error("生成结果时出错:", error);
+        posterError.classList.remove('hidden');
+        errorMessage.textContent = error.message || "未知错误";
+      }
+    }
+    
+    // 创建情绪图表
+    function createEmotionChart() {
+      try {
+        const ctx = document.getElementById('emotion-chart').getContext('2d');
+        
+        // 如果已有图表，销毁它
+        if (emotionChart) {
+          emotionChart.destroy();
+        }
+        
+        emotionChart = new Chart(ctx, {
+          type: 'pie',
+          data: {
+            labels: Object.values(emotions).map(e => e.name),
+            datasets: [{
+              data: Object.values(emotions).map(e => e.count),
+              backgroundColor: Object.values(emotions).map(e => e.color),
+              borderWidth: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  font: {
+                    size: 10
+                  }
+                }
+              }
+            }
+          }
+        });
+        
+        console.log("情绪图表创建成功");
+      } catch (error) {
+        console.error("创建情绪图表时出错:", error);
+        throw error;
+      }
+    }
+    
+    // 生成抽象海报
+    function generateAbstractPoster() {
+      try {
+        console.log("开始生成海报...");
+        
+        const canvas = posterCanvas;
+        const ctx = canvas.getContext('2d');
+        
+        // 检测设备像素比，优化高清屏幕显示
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        
+        // 设置画布尺寸时考虑设备像素比
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+        
+        // 清除画布
+        ctx.clearRect(0, 0, canvas.width/dpr, canvas.height/dpr);
+        
+        // 获取主导情绪和所有情绪数据
+        const dominantEmotion = getDominantEmotion();
+        const emotionData = getEmotionData();
+        
+        console.log("主导情绪:", dominantEmotion.name);
+        
+        // 绘制背景（使用主导情绪的纯色）
+        drawBackground(ctx, canvas, dominantEmotion);
+        
+        // 绘制抽象元素
+        drawAbstractElements(ctx, canvas, emotionData);
+        
+        console.log("海报生成成功");
+      } catch (error) {
+        console.error("海报生成错误:", error);
+        posterError.classList.remove('hidden');
+        errorMessage.textContent = `海报生成失败: ${error.message}`;
+        throw error;
+      }
+    }
+    
+    // 获取主导情绪
+    function getDominantEmotion() {
+      let maxCount = -1;
+      let dominantEmotion = null;
+      
+      for (const [key, emotion] of Object.entries(emotions)) {
+        if (emotion.count > maxCount) {
+          maxCount = emotion.count;
+          dominantEmotion = emotion;
+        }
+      }
+      
+      return dominantEmotion;
+    }
+    
+    // 获取标准化的情绪数据
+    function getEmotionData() {
+      const total = Object.values(emotions).reduce((sum, e) => sum + e.count, 0);
+      
+      return Object.values(emotions).map(emotion => ({
+        ...emotion,
+        normalizedCount: emotion.count / total
+      }));
+    }
+    
+    // 绘制背景（使用主导情绪的纯色）
+    function drawBackground(ctx, canvas, dominantEmotion) {
+      try {
+        // 使用主导情绪的纯色作为背景
+        ctx.fillStyle = dominantEmotion.color;
+        ctx.fillRect(0, 0, canvas.width/dpr, canvas.height/dpr);
+      } catch (error) {
+        console.error("绘制背景时出错:", error);
+        throw error;
+      }
+    }
+    
+    // 绘制抽象元素
+    function drawAbstractElements(ctx, canvas, emotionData) {
+      try {
+        // 根据每种情绪的权重绘制不同数量的抽象元素
+        emotionData.forEach(emotion => {
+          const count = Math.floor(emotion.normalizedCount * 100);
+          
+          // 根据情绪类型绘制不同形状
+          emotion.primaryShapes.forEach(shape => {
+            for (let i = 0; i < count; i++) {
+              // 为形状添加对比色（如果与背景色相同则使用白色）
+              const isSameAsBackground = emotion.color === getDominantEmotion().color;
+              ctx.fillStyle = isSameAsBackground ? '#FFFFFF' : emotion.color;
+              ctx.strokeStyle = isSameAsBackground ? '#FFFFFF' : emotion.color;
+              
+              // 随机位置
+              const x = Math.random() * (canvas.width/dpr);
+              const y = Math.random() * (canvas.height/dpr);
+              
+              // 根据情绪类型绘制不同形状
+              try {
+                switch (shape) {
+                  case 'triangle':
+                    drawTriangle(ctx, x, y, emotion);
+                    break;
+                  case 'square':
+                    drawSquare(ctx, x, y, emotion);
+                    break;
+                  case 'line':
+                    drawLine(ctx, x, y, emotion);
+                    break;
+                  case 'wave':
+                    drawWave(ctx, x, y, emotion);
+                    break;
+                  case 'circle':
+                    drawCircle(ctx, x, y, emotion);
+                    break;
+                  case 'musicNote':
+                    drawMusicNote(ctx, x, y, emotion);
+                    break;
+                  case 'spiral':
+                    drawSpiral(ctx, x, y, emotion);
+                    break;
+                  case 'curve':
+                    drawCurve(ctx, x, y, emotion);
+                    break;
+                  case 'flame':
+                    drawFlame(ctx, x, y, emotion);
+                    break;
+                  case 'randomTriangle':
+                    drawRandomTriangle(ctx, x, y, emotion);
+                    break;
+                  case 'bolt':
+                    drawBolt(ctx, x, y, emotion);
+                    break;
+                  case 'star':
+                    drawStar(ctx, x, y, emotion);
+                    break;
+                }
+              } catch (shapeError) {
+                console.warn(`绘制${shape}形状时出错 (${emotion.name}):`, shapeError);
+                // 继续绘制其他形状，不中断整个过程
+              }
+            }
+          });
+        });
+      } catch (error) {
+        console.error("绘制抽象元素时出错:", error);
+        throw error;
+      }
+    }
+    
+    // 绘制三角形（悲伤情绪）
+    function drawTriangle(ctx, x, y, emotion) {
+      const size = 5 + Math.random() * 15;
+      const opacity = 0.4 + (emotion.normalizedCount * 0.6);
+      
+      ctx.globalAlpha = opacity;
+      ctx.beginPath();
+      ctx.moveTo(x, y - size);
+      ctx.lineTo(x - size, y + size);
+      ctx.lineTo(x + size, y + size);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制正方形（悲伤情绪）
+    function drawSquare(ctx, x, y, emotion) {
+      const size = 5 + Math.random() * 12;
+      const opacity = 0.3 + (emotion.normalizedCount * 0.7);
+      const rotation = Math.random() * Math.PI;
+      
+      ctx.globalAlpha = opacity;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rotation);
+      
+      ctx.beginPath();
+      ctx.rect(-size/2, -size/2, size, size);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制线条（悲伤情绪）
+    function drawLine(ctx, x, y, emotion) {
+      const length = 10 + Math.random() * 40;
+      const thickness = 0.5 + Math.random() * 1.5;
+      const opacity = 0.2 + (emotion.normalizedCount * 0.8);
+      const angle = Math.random() * Math.PI * 2;
+      
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = thickness;
+      
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+      ctx.stroke();
+      
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制波浪线（欢乐情绪）
+    function drawWave(ctx, x, y, emotion) {
+      const amplitude = 2 + Math.random() * 7;
+      const wavelength = 5 + Math.random() * 15;
+      const length = 30 + Math.random() * 60;
+      const opacity = 0.3 + (emotion.normalizedCount * 0.7);
+      const thickness = 0.5 + Math.random() * 1;
+      
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = thickness;
+      ctx.beginPath();
+      
+      for (let i = 0; i < length; i++) {
+        const xPos = x + i;
+        const yPos = y + Math.sin(i / wavelength) * amplitude;
+        
+        if (i === 0) {
+          ctx.moveTo(xPos, yPos);
+        } else {
+          ctx.lineTo(xPos, yPos);
+        }
+      }
+      
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制圆形（欢乐情绪）
+    function drawCircle(ctx, x, y, emotion) {
+      const size = 4 + Math.random() * 12;
+      const opacity = 0.4 + (emotion.normalizedCount * 0.6);
+      
+      ctx.globalAlpha = opacity;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制音符（欢乐情绪）
+    function drawMusicNote(ctx, x, y, emotion) {
+      const size = 5 + Math.random() * 10;
+      const opacity = 0.5 + (emotion.normalizedCount * 0.5);
+      
+      ctx.globalAlpha = opacity;
+      ctx.beginPath();
+      
+      // 音符头部
+      ctx.ellipse(x, y, size/2, size/3, 0, 0, Math.PI * 2);
+      
+      // 音符尾部
+      ctx.moveTo(x + size/2, y);
+      ctx.lineTo(x + size/2, y - size * 2);
+      ctx.arc(x + size/2, y - size * 2, size/4, 0, Math.PI, false);
+      
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制螺旋线（热情情绪）
+    function drawSpiral(ctx, x, y, emotion) {
+      const turns = 2 + Math.random() * 4;
+      const maxRadius = 5 + Math.random() * 20;
+      const opacity = 0.3 + (emotion.normalizedCount * 0.7);
+      const thickness = 0.5 + Math.random() * 1;
+      
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = thickness;
+      ctx.beginPath();
+      
+      for (let i = 0; i < turns * Math.PI * 2; i += 0.1) {
+        const radius = (i / (turns * Math.PI * 2)) * maxRadius;
+        const xPos = x + Math.cos(i) * radius;
+        const yPos = y + Math.sin(i) * radius;
+        
+        if (i === 0) {
+          ctx.moveTo(xPos, yPos);
+        } else {
+          ctx.lineTo(xPos, yPos);
+        }
+      }
+      
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制曲线（热情情绪）
+    function drawCurve(ctx, x, y, emotion) {
+      const controlPointDistance = 15 + Math.random() * 40;
+      const endPointDistance = 30 + Math.random() * 60;
+      const opacity = 0.4 + (emotion.normalizedCount * 0.6);
+      const thickness = 1 + Math.random() * 1.5;
+      
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = thickness;
+      ctx.beginPath();
+      
+      ctx.moveTo(x, y);
+      
+      // 随机控制点和终点
+      const controlX1 = x + (Math.random() * 2 - 1) * controlPointDistance;
+      const controlY1 = y + (Math.random() * 2 - 1) * controlPointDistance;
+      const controlX2 = x + (Math.random() * 2 - 1) * controlPointDistance;
+      const controlY2 = y + (Math.random() * 2 - 1) * controlPointDistance;
+      const endX = x + (Math.random() * 2 - 1) * endPointDistance;
+      const endY = y + (Math.random() * 2 - 1) * endPointDistance;
+      
+      ctx.bezierCurveTo(controlX1, controlY1, controlX2, controlY2, endX, endY);
+      ctx.stroke();
+      
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制火焰（热情情绪）
+    function drawFlame(ctx, x, y, emotion) {
+      const size = 5 + Math.random() * 15;
+      const opacity = 0.5 + (emotion.normalizedCount * 0.5);
+      
+      ctx.globalAlpha = opacity;
+      ctx.beginPath();
+      
+      // 火焰形状
+      ctx.moveTo(x, y);
+      ctx.bezierCurveTo(
+        x - size/2, y - size/2,
+        x - size/4, y - size,
+        x, y - size * 0.7
+      );
+      ctx.bezierCurveTo(
+        x + size/4, y - size,
+        x + size/2, y - size/2,
+        x, y
+      );
+      
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制随机三角形（亢奋情绪）
+    function drawRandomTriangle(ctx, x, y, emotion) {
+      const size = 4 + Math.random() * 12;
+      const opacity = 0.3 + (emotion.normalizedCount * 0.7);
+      
+      ctx.globalAlpha = opacity;
+      ctx.beginPath();
+      
+      // 随机三个点
+      const points = [];
+      for (let i = 0; i < 3; i++) {
+        const angle = (i * 2 * Math.PI / 3) + (Math.random() * Math.PI / 4);
+        const distance = size + Math.random() * size;
+        points.push({
+          x: x + Math.cos(angle) * distance,
+          y: y + Math.sin(angle) * distance
+        });
+      }
+      
+      ctx.moveTo(points[0].x, points[0].y);
+      ctx.lineTo(points[1].x, points[1].y);
+      ctx.lineTo(points[2].x, points[2].y);
+      ctx.closePath();
+      
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制闪电（亢奋情绪）
+    function drawBolt(ctx, x, y, emotion) {
+      const size = 6 + Math.random() * 15;
+      const opacity = 0.5 + (emotion.normalizedCount * 0.5);
+      
+      ctx.globalAlpha = opacity;
+      ctx.beginPath();
+      
+      // 闪电形状
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + size * 0.3, y + size * 0.5);
+      ctx.lineTo(x - size * 0.2, y + size * 0.7);
+      ctx.lineTo(x + size * 0.2, y + size);
+      
+      // 添加分支
+      if (Math.random() > 0.5) {
+        ctx.moveTo(x - size * 0.1, y + size * 0.6);
+        ctx.lineTo(x - size * 0.3, y + size * 0.8);
+      }
+      
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    
+    // 绘制星星（亢奋情绪）
+    function drawStar(ctx, x, y, emotion) {
+      const size = 4 + Math.random() * 10;
+      const opacity = 0.6 + (emotion.normalizedCount * 0.4);
+      const points = 5; // 五角星
+      const outerRadius = size;
+      const innerRadius = size / 2;
+      
+      ctx.globalAlpha = opacity;
+      ctx.beginPath();
+      
+      for (let i = 0; i < points * 2; i++) {
+        const angle = (i * Math.PI / points) - (Math.PI / 2);
+        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+        const pointX = x + Math.cos(angle) * radius;
+        const pointY = y + Math.sin(angle) * radius;
+        
+        if (i === 0) {
+          ctx.moveTo(pointX, pointY);
+        } else {
+          ctx.lineTo(pointX, pointY);
+        }
+      }
+      
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    
+    // 下载海报
+    function downloadPoster() {
+      try {
+        const link = document.createElement('a');
+        link.download = '情绪抽象海报.png';
+        link.href = posterCanvas.toDataURL('image/png');
+        link.click();
+      } catch (error) {
+        console.error("下载海报时出错:", error);
+        alert("下载失败，请重试");
+      }
+    }
+  </script>
+</body>
+</html>
+    
